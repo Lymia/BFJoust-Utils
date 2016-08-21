@@ -1,6 +1,9 @@
 package moe.lymia.bfjoust.solver
 
-class Cursor(var dp: Int, var hill: HillEvaluation, var fragment: StringBuilder = new StringBuilder()) {
+import moe.lymia.bfjoust.vm.ArenaAction
+
+class Cursor(var dp: Int, var hill: ParallelEvaluator,
+             var winCount: Int = 0, var fragment: StringBuilder = new StringBuilder()) {
   private var last = "XXX"
   private var lastCount = 0
   def append(str: String) = {
@@ -21,103 +24,82 @@ class Cursor(var dp: Int, var hill: HillEvaluation, var fragment: StringBuilder 
   }
 
   def forward() = {
-    hill.evaluate()
+    hill.cycle(ArenaAction.IncPtr)
     dp = dp + 1
     append(">")
-    hill.tickEnd()
   }
   def backward() = {
-    hill.evaluate()
+    hill.cycle(ArenaAction.DecPtr)
     dp = dp - 1
     append("<")
-    hill.tickEnd()
   }
   def goto(ndp: Int) = {
     val diff  = ndp - dp
     val count = Math.abs(diff)
-
-    var mistake = false
-    for(i <- 0 until count) mistake = mistake | (if(diff < 0) backward() else forward())
-    mistake
+    for(i <- 0 until count) if(diff < 0) backward() else forward()
   }
 
-  def nop() = {
-    hill.evaluate()
-    append(".")
-    hill.tickEnd()
-  }
-  def sleep(ticks: Int) = {
-    var mistake = false
-    for(i <- 0 until ticks) mistake = mistake | nop()
-    mistake
-  }
+  def nop() = hill.cycle(ArenaAction.NullOp)
+  def sleep(ticks: Int) =  for(i <- 0 until ticks) nop()
 
   def inc() = {
-    hill.evaluate()
-    hill.addTo(dp, 1)
+    hill.cycle(ArenaAction.IncData)
     append("+")
-    hill.tickEnd()
   }
   def dec() = {
-    hill.evaluate()
-    hill.addTo(dp, -1)
+    hill.cycle(ArenaAction.DecData)
     append("-")
-    hill.tickEnd()
   }
   def add(diff: Int) = {
     val count = Math.abs(diff)
-
-    var mistake = false
-    for(i <- 0 until count) mistake = mistake | (if(diff < 0) dec() else inc())
-
-    mistake
+    for(i <- 0 until count) if(diff < 0) dec() else inc()
   }
   def add(diff: Int, duty: Int) = {
     val count = Math.abs(diff)
-
-    var mistake = false
-    for(i <- 0 until count) mistake = mistake | (if(duty == 0 || i % duty != (duty - 1))
-                                                    if(diff < 0) dec() else inc() else nop())
-
-    mistake
+    for(i <- 0 until count) if(duty == 0 || i % duty != (duty - 1)) if(diff < 0) dec() else inc() else nop()
   }
 
-  def test(evalFn: Cursor => Unit) = {
+  private def appendFragment(string: String, epilogue: String = "(.)*-1") = {
+    append(string)
+    if(!string.endsWith(epilogue)) append(epilogue)
+  }
+  def fork(evalFn: Cursor => Unit) = {
     val (a, b) = hill.test(dp)
-    val (hea, heb) = (new Cursor(dp, new HillEvaluation(a)), new Cursor(dp, new HillEvaluation(b)))
+    val wins = hill.won + winCount
 
-    hea.hill.evaluate()
-    heb.hill.evaluate()
-    val mistake = hea.hill.tickEnd() | heb.hill.tickEnd()
-    if(!mistake) {
+    val aWins = {
+      val hea = new Cursor(dp, a, wins)
+      hea.hill.cycle(ArenaAction.NullOp)
       evalFn(hea)
-      evalFn(heb)
-
       append("[")
-      append(hea.toString())
+      appendFragment(hea.toString())
       append("]")
-      append(heb.toString())
+      hea.hill.won
     }
-
-    mistake
+    {
+      val heb = new Cursor(dp, b, aWins + wins)
+      heb.hill.cycle(ArenaAction.NullOp)
+      evalFn(heb)
+      appendFragment(heb.toString())
+    }
   }
 
   def nextThreat(searchLength: Int): Int = {
     val nh = hill.clone()
     for(i <- 1 to searchLength) {
-      if({nh.evaluate(); nh.tickEnd()}) return i
+      if({nh.cycle(ArenaAction.NullOp); nh.hasLost}) return i
     }
     searchLength
   }
 
   def remaining = hill.remaining
-  def length = hill.states.count(!_.isEnded)
   def minTape = hill.minTape
   def isValid = dp >= 0 && dp < hill.minTape
   def histogram(tapePos: Int = this.dp): Map[Byte, Int] = hill.histogram(tapePos)
+  def won = winCount + hill.won
 
   override def clone() = {
-    val c = new Cursor(dp, hill.clone(), fragment.clone())
+    val c = new Cursor(dp, hill.clone(), winCount, fragment.clone())
     c.last = last
     c.lastCount = lastCount
     c
@@ -125,6 +107,7 @@ class Cursor(var dp: Int, var hill: HillEvaluation, var fragment: StringBuilder 
   def become(c: Cursor) = {
     dp = c.dp
     hill = c.hill.clone()
+    winCount = c.winCount
     fragment = c.fragment.clone()
     last = c.last
     lastCount = c.lastCount

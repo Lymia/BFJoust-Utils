@@ -43,59 +43,7 @@ object Parser extends scala.util.parsing.combinator.RegexParsers {
     (instruction *) ^^ {_.filter(_.isInstanceOf[AST.Instruction]).map(_.asInstanceOf[AST.Instruction])}
 
   def apply(s: String) = parseAll(instructionSet, s) match {
-    case Success(nodes, _)   => try {
-      Left(ASTProcessor.processProgram(nodes))
-    } catch {
-      case t: Throwable => Right(t.getClass+" during parsing: "+t.getMessage)
-    }
+    case Success(nodes, _)   => Left(nodes)
     case NoSuccess(err,next) => Right("At line "+next.pos.line+", column "+next.pos.column+": "+err)
-  }
-}
-
-object ASTProcessor {
-  private def processProgramInner(instructions: Seq[AST.Instruction]): (Seq[AST.Instruction], Int) = {
-    if(instructions.count(_.isInstanceOf[AST.Inner]) > 1) sys.error("{} in same scope as {} in program.")
-    val data = for(i <- instructions) yield i match {
-      case AST.Loop(newIns) =>
-        val (ni, ct) = processProgramInner(newIns)
-        (AST.Loop(ni), ct)
-      case AST.Repeat(newIns, c) =>
-        val (ni, ct) = processProgramInner(newIns)
-        if(ct > 0) (AST.Outer (ni, c), ct - 1)
-        else       (AST.Repeat(ni, c), 0)
-      case AST.Inner(newIns) =>
-        val (ni, ct) = processProgramInner(newIns)
-        (AST.Inner(ni), ct + 1)
-      case AST.Outer(_, _) => sys.error("LoopOuter in source parse.")
-      case x => (x, 0)
-    }
-    (data.map(_._1), data.map(_._2).sum)
-  }
-  private def removeEmptyLoopsInner(instructions: Seq[AST.Instruction]): Seq[AST.Instruction] =
-    instructions.filter(_ match {
-      case AST.Loop(Seq()) => false
-      case AST.Repeat(Seq(), _) => false
-      case AST.Repeat(_, 0) => false
-      case _ => true
-    }).flatMap {
-      case AST.Loop(newIns) => Seq(AST.Loop(removeEmptyLoopsInner(newIns)))
-      case AST.Repeat(Seq(AST.Inner(x)), _) => x
-      case AST.Repeat(newIns, c) => Seq(AST.Repeat(removeEmptyLoopsInner(newIns), c))
-      case AST.Inner(newIns) => Seq(AST.Inner(removeEmptyLoopsInner(newIns)))
-      case x => Seq(x)
-    }
-  def processProgram(instructions: Seq[AST.Instruction]) = {
-    var ci = instructions
-    while({
-      val ni = removeEmptyLoopsInner(ci)
-      if(ni == ci) false
-      else {
-        ci = ni
-        true
-      }
-    }) {}
-    val (fi, ct) = processProgramInner(ci)
-    if(ct != 0) sys.error("Too many {}")
-    fi
   }
 }

@@ -1,8 +1,6 @@
 package moe.lymia.bfjoust.vm
 
-import moe.lymia.bfjoust.vm.Opcode.Label
-
-import scala.collection.mutable
+import java.util
 
 sealed trait TempOpcode
 sealed trait Opcode extends TempOpcode
@@ -39,74 +37,57 @@ object Opcode {
     }
   }
 }
+case class Program(name: String, opcodes: IndexedSeq[Opcode], idCount: Int) {
+  def printProgram() = {
+    println("=== "+name+" ===")
+    Opcode.disassemble(opcodes)
+  }
+}
 
-case class Program(opcodes: IndexedSeq[Opcode], idCount: Int)
+final class BytecodeEvaluator private (val program: Program, private var ip: Int, private var rc: Array[Int]) {
+  def cycle(test: Boolean, trace: Boolean = false, traceLead: String = ""): ArenaAction = {
+    while(ip < program.opcodes.length) {
+      val ins = program.opcodes(ip)
+      if(trace) println(traceLead+"ip = "+ip+", opcodes(ip) = "+Opcode.disassembleInstruction(ins)+
+                                  ", rc = "+util.Arrays.toString(rc))
+      ip = ip + 1
+      ins match {
+        case Opcode.IncData =>
+          return ArenaAction.IncData
+        case Opcode.DecData =>
+          return ArenaAction.DecData
+        case Opcode.IncPtr =>
+          return ArenaAction.IncPtr
+        case Opcode.DecPtr =>
+          return ArenaAction.DecPtr
+        case Opcode.NullOp =>
+          return ArenaAction.NullOp
 
-object Compiler {
-  private def compile(ast: Seq[AST.Instruction]) = {
-    def loop(ast: Seq[AST.Instruction], currentId: Int,
-             loopLabels: List[(Label, Label, Int, Int)]): Seq[TempOpcode] =
-      ast flatMap {
-        case AST.IncData => Seq(Opcode.IncData)
-        case AST.DecData => Seq(Opcode.DecData)
-        case AST.IncPtr  => Seq(Opcode.IncPtr )
-        case AST.DecPtr  => Seq(Opcode.DecPtr )
-        case AST.NullOp  => Seq(Opcode.NullOp )
+        case Opcode.BeginLoop(t) =>
+          if(!test) ip = t
+          return ArenaAction.NullOp
+        case Opcode.EndLoop  (t) =>
+          if(test) ip = t
+          return ArenaAction.NullOp
 
-        case AST.Repeat(i, l) =>
-          val beginLabel = new Opcode.Label()
-          Seq(Opcode.BeginRepeat(currentId), beginLabel) ++
-          loop(i, currentId + 1, loopLabels) ++
-          Seq(Opcode.ApplyLabel(i => Opcode.EndRepeat(i, l, currentId), beginLabel))
-        case AST.Loop(i) =>
-          val beginLabel = new Opcode.Label()
-          val endLabel   = new Opcode.Label()
-          Seq(Opcode.ApplyLabel(i => Opcode.BeginLoop(i), endLabel  ), beginLabel) ++
-          loop(i, currentId, loopLabels) ++
-          Seq(Opcode.ApplyLabel(i => Opcode.EndLoop  (i), beginLabel), endLabel  )
+        case Opcode.BeginRepeat(id) =>
+          rc(id) = 0
+        case Opcode.EndRepeat(i, c, id) =>
+          rc(id) = rc(id) + 1
+          if(rc(id) < c) ip = i
+        case Opcode.EndOuter(i, c, id) =>
+          if(rc(id) > 0) ip = i
+          rc(id) = rc(id) - 1
 
-        case AST.Outer(i, l) =>
-          val beginLabel = new Opcode.Label()
-          val innerLabel = new Opcode.Label()
-          Seq(Opcode.BeginRepeat(currentId), beginLabel) ++
-          loop(i, currentId + 1, (beginLabel, innerLabel, currentId, l) :: loopLabels) ++
-          Seq(Opcode.ApplyLabel(i => Opcode.EndOuter(i, l, currentId), innerLabel))
-        case AST.Inner(i) =>
-          val (beginLabel, innerLabel, id, l) = loopLabels.head
-          Seq(Opcode.ApplyLabel(i => Opcode.EndRepeat(i, l, id), beginLabel)) ++
-          loop(i, currentId, loopLabels.tail) ++
-          Seq(innerLabel)
-
-        case i => sys.error("Unknown instruction: "+i)
+        case _ => sys.error("unknown opcode")
       }
-    loop(ast, 0, List())
-  }
-
-  private def resolveLabels(ops: Seq[TempOpcode]): Seq[Opcode] = {
-    val posMap = new mutable.HashMap[Opcode.Label, Int]
-
-    var p = 0
-    for(o <- ops) o match {
-      case l: Label => posMap.put(l, p)
-      case _        => p = p + 1
     }
-
-    ops.filter(!_.isInstanceOf[Label]).map {
-      case o: Opcode => o
-      case Opcode.ApplyLabel(fn, l) => fn(posMap(l))
-      case _ => sys.error("failed to resolve labels")
-    }
+    ArenaAction.NullOp
   }
 
-  private def findIdSize(ops: Seq[Opcode]) = ops.map {
-    case Opcode.BeginRepeat(      id) => id
-    case Opcode.EndRepeat  (_, _, id) => id
-    case Opcode.EndOuter   (_, _, id) => id
-    case _                            => -1
-  }.max + 1
-
-  def apply(ast: Seq[AST.Instruction]) = {
-    val compiled = resolveLabels(compile(ast))
-    Program(compiled.toIndexedSeq, findIdSize(compiled))
-  }
+  override def clone() = new BytecodeEvaluator(program, ip, util.Arrays.copyOf(rc, rc.length))
+  override def toString: String = "BytecodeEvaluator[@"+program.name+"]"
+}
+object BytecodeEvaluator {
+  def apply(program: Program) = new BytecodeEvaluator(program, 0, new Array[Int](program.idCount))
 }
