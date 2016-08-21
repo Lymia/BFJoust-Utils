@@ -1,4 +1,4 @@
-package moe.lymia.yume
+package moe.lymia.bfjoust.solver
 
 object Strategy {
   def setInitialDecoys(c: Cursor) = {
@@ -98,15 +98,15 @@ object Strategy {
 
       if(c.goto(0)) sys.error("could not defend")
       val maxNudge = math.max(nextThreat - 1, 5)
-      val (nc, best, adj) = util.Random.shuffle((for(d <- 0 to 8;
-                                                     i <- -maxNudge to maxNudge) yield {
+      val (nc, best, adj) = (for(d <- 0 to 8;
+                                 i <- -maxNudge to maxNudge) yield {
         val next = c.clone()
         val abs  = math.abs(i)
         if(if(i == 0) next.nop() else next.add(i, d)) (next, -1, -10000)
         else {
           (next, next.nextThreat(searchDistance), i)
         }
-      }).sortBy(_._2).reverse.take(5)).head
+      }).maxBy(_._2)
       if(best == -1 || adj == -10000) sys.error("could not defend")
 
       println("New threat distance from best: "+best+", adjustment "+adj)

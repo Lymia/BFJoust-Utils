@@ -1,6 +1,6 @@
-package moe.lymia.yume.bfjoust
+package moe.lymia.bfjoust.vm
 
-import moe.lymia.yume.bfjoust.Opcode.Label
+import moe.lymia.bfjoust.vm.Opcode.Label
 
 import scala.collection.mutable
 
@@ -43,35 +43,35 @@ object Opcode {
 case class Program(opcodes: IndexedSeq[Opcode], idCount: Int)
 
 object Compiler {
-  private def compile(ast: Seq[BFJoustInstruction]) = {
-    def loop(ast: Seq[BFJoustInstruction], currentId: Int,
+  private def compile(ast: Seq[AST.Instruction]) = {
+    def loop(ast: Seq[AST.Instruction], currentId: Int,
              loopLabels: List[(Label, Label, Int, Int)]): Seq[TempOpcode] =
       ast flatMap {
-        case IncData => Seq(Opcode.IncData)
-        case DecData => Seq(Opcode.DecData)
-        case IncPtr  => Seq(Opcode.IncPtr )
-        case DecPtr  => Seq(Opcode.DecPtr )
-        case NullOp  => Seq(Opcode.NullOp )
+        case AST.IncData => Seq(Opcode.IncData)
+        case AST.DecData => Seq(Opcode.DecData)
+        case AST.IncPtr  => Seq(Opcode.IncPtr )
+        case AST.DecPtr  => Seq(Opcode.DecPtr )
+        case AST.NullOp  => Seq(Opcode.NullOp )
 
-        case Repeat(i, l) =>
+        case AST.Repeat(i, l) =>
           val beginLabel = new Opcode.Label()
           Seq(Opcode.BeginRepeat(currentId), beginLabel) ++
           loop(i, currentId + 1, loopLabels) ++
           Seq(Opcode.ApplyLabel(i => Opcode.EndRepeat(i, l, currentId), beginLabel))
-        case Loop(i) =>
+        case AST.Loop(i) =>
           val beginLabel = new Opcode.Label()
           val endLabel   = new Opcode.Label()
           Seq(Opcode.ApplyLabel(i => Opcode.BeginLoop(i), endLabel  ), beginLabel) ++
           loop(i, currentId, loopLabels) ++
           Seq(Opcode.ApplyLabel(i => Opcode.EndLoop  (i), beginLabel), endLabel  )
 
-        case Outer(i, l) =>
+        case AST.Outer(i, l) =>
           val beginLabel = new Opcode.Label()
           val innerLabel = new Opcode.Label()
           Seq(Opcode.BeginRepeat(currentId), beginLabel) ++
           loop(i, currentId + 1, (beginLabel, innerLabel, currentId, l) :: loopLabels) ++
           Seq(Opcode.ApplyLabel(i => Opcode.EndOuter(i, l, currentId), innerLabel))
-        case Inner(i) =>
+        case AST.Inner(i) =>
           val (beginLabel, innerLabel, id, l) = loopLabels.head
           Seq(Opcode.ApplyLabel(i => Opcode.EndRepeat(i, l, id), beginLabel)) ++
           loop(i, currentId, loopLabels.tail) ++
@@ -105,7 +105,7 @@ object Compiler {
     case _                            => -1
   }.max + 1
 
-  def apply(ast: Seq[BFJoustInstruction]) = {
+  def apply(ast: Seq[AST.Instruction]) = {
     val compiled = resolveLabels(compile(ast))
     Program(compiled.toIndexedSeq, findIdSize(compiled))
   }

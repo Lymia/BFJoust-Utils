@@ -1,8 +1,8 @@
-package moe.lymia.yume.bfjoust
+package moe.lymia.bfjoust.vm
 
 import java.util
 
-case class ProgramState(name: String, program: Program, polarity: Int, tape: Array[Byte]) {
+final class ProgramState(val name: String, val program: Program, val polarity: Int, val tape: Array[Byte]) {
   import ProgramState.debugPrint
 
   private var lost = false
@@ -105,7 +105,7 @@ case class ProgramState(name: String, program: Program, polarity: Int, tape: Arr
   def isEnded = lost || won
 
   override def clone() = {
-    val rt = ProgramState(name, program, polarity, util.Arrays.copyOf(tape, tape.length))
+    val rt = new ProgramState(name, program, polarity, util.Arrays.copyOf(tape, tape.length))
 
     rt.lost = lost
     rt.won  = won
@@ -139,6 +139,6 @@ object ProgramState {
 
   def generateTapes(name: String, program: Program) = {
     for(len <- 10 to 30;
-        pol <- Seq(-1, 1)) yield ProgramState(name, program, pol, makeTape(len))
+        pol <- Seq(-1, 1)) yield new ProgramState(name, program, pol, makeTape(len))
   }
 }

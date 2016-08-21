@@ -1,8 +1,8 @@
-package moe.lymia.yume
+package moe.lymia.bfjoust.solver
 
 import java.io.File
 
-import moe.lymia.yume.bfjoust._
+import moe.lymia.bfjoust.vm._
 
 class HillEvaluation(var states: Seq[ProgramState]) {
   var origLength = states.length

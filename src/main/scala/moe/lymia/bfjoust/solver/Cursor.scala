@@ -1,4 +1,4 @@
-package moe.lymia.yume
+package moe.lymia.bfjoust.solver
 
 class Cursor(var dp: Int, var hill: HillEvaluation, var fragment: StringBuilder = new StringBuilder()) {
   private var last = "XXX"

@@ -1,6 +1,8 @@
-package moe.lymia.yume
+package moe.lymia.bfjoust
 
 import java.io.PrintWriter
+
+import moe.lymia.bfjoust.solver._
 
 object Main {
   def main(args: Array[String]) = {
