@@ -1,6 +1,8 @@
 package moe.lymia.bfjoust.solver
 
 object Solver {
+  val duties = 1 to 12
+
   def setInitialDecoys(c: Cursor) = {
     for(i <- 0 until 8) {
       c.forward()
@@ -56,28 +58,29 @@ object Solver {
       var i = openTicks
       while(i > 2) {
         val initWon = c.won
+
         val data = (for(t0 <- act; t1 <- act; t2 <- act) yield {
           val next = c.clone()
-          for(c <- Seq(t0, t1, t2)) c(next)
-          if(c.hill.hasLost) Seq()
+          for(op <- Seq(t0, t1, t2)) op(next)
+          if(next.hill.hasLost) Seq()
           else Seq((next, next.won - initWon))
         }).flatten
         val (next, ct) = if(data.isEmpty) (null, 0) else data.maxBy(_._2)
 
         if(ct == 0) {
-          val maxNudge = math.min(i - 5, 25)
-          if(maxNudge < 0) return
-          val initWon = c.won
-          val data = (for(d <- 0 to 8; i <- -maxNudge to maxNudge) yield {
+          val maxNudge = i - 5
+          if(maxNudge <= 0) return
+          val data = (for(d <- duties; i <- -maxNudge to maxNudge) yield {
             val next = c.clone()
             if(i == 0) next.nop() else next.add(i, d)
             if(next.hill.hasLost) Seq()
             else {
-              val target = c.clone()
-              target.nop()
-              Seq((next, (target.won - initWon, -closest(target), evaluateDistances(target)), i))
+              val target = next.clone()
+              for(i <- 0 until 5) target.nop()
+              Seq((next, (next.won, -closest(target), evaluateDistances(target)), i))
             }
           }).flatten
+          if(data.isEmpty) return
           val (next, best, adj) = data.maxBy(_._2)
           i = i - (next.hill.tick - c.hill.tick)
           println("Best attack adjustment: "+best+", adjustment "+adj)
@@ -85,7 +88,7 @@ object Solver {
         } else c.become(next)
 
         if(initWon != c.won) {
-          println("####### Defeated "+(c.winCount+c.hill.won)+"/"+c.hill.totalCount)
+          println("####### Defeated "+c.won+"/"+c.hill.totalCount)
           return
         }
 
@@ -111,8 +114,7 @@ object Solver {
 
       c.goto(0)
       val maxNudge = math.max(nextThreat - 1, 5)
-      val (nc, best, adj) = (for(d <- 0 to 8;
-                                 i <- -maxNudge to maxNudge) yield {
+      val (nc, best, adj) = (for(d <- duties; i <- -maxNudge to maxNudge) yield {
         val next = c.clone()
         if(i == 0) next.nop() else next.add(i, d)
         if(next.hill.hasLost) (next, -1, -10000)

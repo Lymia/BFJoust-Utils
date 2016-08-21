@@ -23,10 +23,9 @@ object Compiler {
   }
   private def removeEmptyLoopsInner(instructions: Seq[AST.Instruction]): Seq[AST.Instruction] =
     instructions.flatMap {
-      case AST.Loop(Seq()) | AST.Repeat(Seq(), _) | AST.Repeat(_, 0) => Seq()
+      case AST.Repeat(Seq(), _) | AST.Repeat(_, 0) => Seq()
 
       case AST.Repeat(Seq(AST.Inner(x)), _) => x
-
       case AST.Loop(i) => Seq(AST.Loop(removeEmptyLoopsInner(i)))
       case AST.Repeat(i, c) => Seq(AST.Repeat(removeEmptyLoopsInner(i), c))
       case AST.Inner(i) => Seq(AST.Inner(removeEmptyLoopsInner(i)))
@@ -74,7 +73,7 @@ object Compiler {
           val innerLabel = new Opcode.Label()
           Seq(Opcode.BeginRepeat(currentId), beginLabel) ++
           loop(i, currentId + 1, (beginLabel, innerLabel, currentId, l) :: loopLabels) ++
-          Seq(Opcode.ApplyLabel(i => Opcode.EndOuter(i, l, currentId), innerLabel))
+          Seq(Opcode.ApplyLabel(i => Opcode.EndOuter(i, currentId), innerLabel))
         case AST.Inner(i) =>
           val (beginLabel, innerLabel, id, l) = loopLabels.head
           Seq(Opcode.ApplyLabel(i => Opcode.EndRepeat(i, l, id), beginLabel)) ++
@@ -108,7 +107,7 @@ object Compiler {
   private def findIdSize(ops: Seq[Opcode]) = (-1 +: ops.map {
     case Opcode.BeginRepeat(      id) => id
     case Opcode.EndRepeat  (_, _, id) => id
-    case Opcode.EndOuter   (_, _, id) => id
+    case Opcode.EndOuter   (_,    id) => id
     case _                            => -1
   }).max + 1
 

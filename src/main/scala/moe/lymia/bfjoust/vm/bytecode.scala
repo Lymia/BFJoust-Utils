@@ -15,7 +15,7 @@ object Opcode {
   case class EndLoop    (i: Int                     ) extends Opcode
   case class BeginRepeat(                    id: Int) extends Opcode
   case class EndRepeat  (i: Int, count: Int, id: Int) extends Opcode
-  case class EndOuter   (i: Int, count: Int, id: Int) extends Opcode
+  case class EndOuter   (i: Int            , id: Int) extends Opcode
 
   case class ApplyLabel(fn: Int => Opcode, label: Label) extends TempOpcode
   class Label() extends TempOpcode
@@ -26,7 +26,7 @@ object Opcode {
 
     case Opcode.BeginRepeat(      id) => "BeginRepeat["+id+"]"
     case Opcode.EndRepeat  (t, c, id) => "EndRepeat["+id+"] "+c+" @"+t
-    case Opcode.EndOuter   (t, c, id) => "EndOuter["+id+"] "+c+" @"+t
+    case Opcode.EndOuter   (t,    id) => "EndOuter["+id+"]  @"+t
 
     case x => x.toString
   }
@@ -71,13 +71,15 @@ final class BytecodeEvaluator private (val program: Program, private var ip: Int
           return ArenaAction.NullOp
 
         case Opcode.BeginRepeat(id) =>
-          rc(id) = 0
+          rc(id) = 1
         case Opcode.EndRepeat(i, c, id) =>
-          rc(id) = rc(id) + 1
-          if(rc(id) < c) ip = i
-        case Opcode.EndOuter(i, c, id) =>
-          if(rc(id) > 0) ip = i
+          if(rc(id) < c) {
+            ip = i
+            rc(id) = rc(id) + 1
+          }
+        case Opcode.EndOuter(i, id) =>
           rc(id) = rc(id) - 1
+          if(rc(id) > 0) ip = i
 
         case _ => sys.error("unknown opcode")
       }

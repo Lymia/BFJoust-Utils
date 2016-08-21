@@ -16,19 +16,19 @@ final case class EnemyState(arena: Arena, right: BytecodeEvaluator) {
 }
 
 final class ParallelEvaluator private (var states: Seq[EnemyState], val origCount: Int,
-                                       val totalCount: Int, private var lost: Boolean,
+                                       val totalCount: Int, private var lost: Int,
                                        var ctick: Int) {
   def cycle(action: ArenaAction) = {
     states.foreach(_.cycle(action))
-    if(states.exists(x => x.status == ArenaStatus.RightWon || x.status == ArenaStatus.Tied)) lost = true
+    lost = lost + states.count(x => x.status == ArenaStatus.RightWon || x.status == ArenaStatus.Tied)
     states = states.filter(_.status == ArenaStatus.Running)
     ctick = ctick + 1
   }
 
   def minTape   = if(states.isEmpty) 30 else states.minBy(_.tape.length).tape.length
   def remaining = states.length
-  def won       = origCount - remaining
-  def hasLost   = lost
+  def won       = origCount - remaining - lost
+  def hasLost   = lost > 0
   def tick      = ctick
 
   def histogram(tapePos: Int) =
@@ -50,6 +50,6 @@ object ParallelEvaluator {
       yield EnemyState(Arena(tapeLength, polarity), BytecodeEvaluator(program)))
   def apply(programs: Seq[Program]) = {
     val states = makeEnemyStates(programs)
-    new ParallelEvaluator(states, states.length, states.length, false, 0)
+    new ParallelEvaluator(states, states.length, states.length, 0, 0)
   }
 }

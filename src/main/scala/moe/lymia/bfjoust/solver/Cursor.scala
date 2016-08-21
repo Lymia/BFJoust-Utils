@@ -10,7 +10,7 @@ class Cursor(var dp: Int, var hill: ParallelEvaluator,
     if(str != last) {
       if(lastCount == 0) { }
       else if(lastCount == 1) fragment.append(last)
-      else if(last.length * lastCount > lastCount.toString.length + 3 + last.length) {
+      else if((last.length * lastCount) > (lastCount.toString.length + 3 + last.length)) {
         fragment.append("(")
         fragment.append(last)
         fragment.append(")")
@@ -39,7 +39,10 @@ class Cursor(var dp: Int, var hill: ParallelEvaluator,
     for(i <- 0 until count) if(diff < 0) backward() else forward()
   }
 
-  def nop() = hill.cycle(ArenaAction.NullOp)
+  def nop() = {
+    hill.cycle(ArenaAction.NullOp)
+    append(".")
+  }
   def sleep(ticks: Int) =  for(i <- 0 until ticks) nop()
 
   def inc() = {
@@ -50,13 +53,29 @@ class Cursor(var dp: Int, var hill: ParallelEvaluator,
     hill.cycle(ArenaAction.DecData)
     append("-")
   }
-  def add(diff: Int) = {
+  def add(diff: Int) {
     val count = Math.abs(diff)
     for(i <- 0 until count) if(diff < 0) dec() else inc()
   }
-  def add(diff: Int, duty: Int) = {
+
+  private def dutySection(add: Boolean, duty: Int, count: Int) = {
+    val char = if(add) "+" else "-"
+    val str = (if(duty > 5) "("+char+")*"+(duty-1) else Array.fill(duty - 1)(char).mkString("")) + "."
+
+    for(i <- 0 until count) {
+      for(i <- 0 until duty - 1) if(add) hill.cycle(ArenaAction.IncData) else hill.cycle(ArenaAction.DecData)
+      hill.cycle(ArenaAction.NullOp)
+      append(str)
+    }
+  }
+  def add(diff: Int, duty: Int) {
     val count = Math.abs(diff)
-    for(i <- 0 until count) if(duty == 0 || i % duty != (duty - 1)) if(diff < 0) dec() else inc() else nop()
+    if(diff == 0) { }
+    else if(duty <= 1) add(diff)
+    else {
+      dutySection(diff >= 0, duty, count / duty)
+      add(math.signum(diff) * (diff % duty))
+    }
   }
 
   private def appendFragment(string: String, epilogue: String = "(.)*-1") = {
